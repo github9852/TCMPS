@@ -1,0 +1,242 @@
+
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(arules)
+library(arulesViz)
+library(readxl)
+
+#2022年处方信息-算法
+#加载处方数据，数据集转化为list
+
+mydata <- read_excel("2022处方.xlsx")
+
+df<- data.frame()
+nrow<-nrow(mydata)
+for(i in 1:nrow){
+d<-data.frame(mydata[[1]][i],strsplit(mydata[[2]][i],"、"))
+ID<-d[,1]
+ZY<-d[,2]
+d<-data.frame(ID,ZY)
+df<-rbind (df, d)
+}
+#将处方编号和单一中药对应起来
+write.csv(df,"处方编号和单一中药对应.csv")
+
+head(df)
+#ZY列的不重复项数，即不重复的中药有多少种
+length(unique(df$ZY))
+
+#ID列的不重复项数，即处方数有多少
+length(unique(df$ID))
+
+#按处方编号ID分类，计算每一个处方编号ID对应的中药数量
+ID_zy <- df %>% group_by(ID) %>% summarise(num=n())
+
+#统计处方组成数量的最小值、最大值、均值、中值、各分位值
+summary(ID_zy)
+write.csv(ID_zy,file="每个处方的中药数量ID_zy.csv")
+
+#每一张处方中的药物数量图，横坐标处方编号，纵坐标数量
+#若x=ID,则按原本的处方顺序排序，若代码为x = reorder(ID,-num)，则按处方中药物数量降序绘图，x = reorder(ID,num)，为升序绘图。
+ggplot(ID_zy,aes(x = reorder(ID,-num),y = num)) +
+  theme_bw(base_family = "STKaiti",base_size = 10) +
+  geom_bar(stat = "identity",fill = "lightblue") +
+  labs(x = "处方",y = "中药数量")
+
+#图片美化
+#添加字体
+windowsFonts(Times=windowsFont("Times New Roman"))
+ggplot(ID_zy, aes(x = reorder(ID,-num),y = num,fill=factor(num)))+#横坐标设置为取间，纵坐标为频数，填充颜色以num为对象
+geom_bar(stat="identity",width=0.9)+#组间距宽度
+scale_fill_hue()+#配制颜色
+ylim(0,max(ID_zy$num))+#设置纵轴范围
+#geom_text(aes(label =num, vjust = -0.8, hjust = 0.5,family="Times"),size=2,show.legend = F)+#设置数据标签的字体、大小、位置等,由于此次数据较多，不予显示
+#结合theme设置
+#设置背景
+theme（panel.background=element_rect（fill=“白色”））+#设置背景变为白色
+#设置坐标轴字体颜色位置
+theme(axis.text.x=element_text(angle=30,hjust = 1,colour="white",family="Times",size=rel(0.01)))+#设置x轴刻度标签的字体显示倾斜角度为30度，并向下调整1，字体为Times，此次设置字体为白色
+theme（axis.text.y=element_text（color=“黑色”，family=“Times”，size=rel（1.5）））+#设置y轴上的字体
+xlab("处方")+ #设置横坐标轴标签
+ylab("中药数量")+#设置纵坐标轴标签
+#labs(title = "处方组成数量分布图")+ #设置标题标签，此次不予显示
+#设置标题颜色字体位置
+theme(plot.title=element_text(color="red",face="bold",size=rel(1.5),hjust=0.5))+#大标题颜色，字体，大小，hjust=0.5横向坐标0.5（即居中），vjust表示纵向
+theme(axis.title.x=element_text(color="blue",family="Times",size=rel(1)))+#设置x轴标题
+theme(axis.title.y=element_text(color="blue",family="Times",size=rel(1)))+#设置y轴标题
+theme(axis.line=element_line(colour="black",size=0.8))+#显示坐标轴线及线条粗细
+#设置坐标轴主次网格线
+theme(panel.grid.major.x=element_blank(),panel.grid.minor.x=element_blank())+#隐藏横网格线
+theme(panel.grid.major.y=element_line(colour="white",linetype="dashed",size=0.2),panel.grid.minor.y=element_line(colour="white",linetype="dashed",size=0.2))+#绘制Y轴上横线
+#设置图例
+theme(legend.text=element_text(face="italic", family="Times", colour="black",size=16))+#设置图例的子标题的字体属性
+theme(legend.title=element_text(face="italic", family="Times", colour="black", size=18))+ #设置图例的总标题的字体属性
+theme(legend.position="none")#设置图例位置，none表示不显示图例
+ggsave('ID_zy.pdf', width = 6, height = 4)#保存图片
+
+
+#按ZY分类，计算各ZY的处方出现次数
+ZY_id <- df %>%
+  group_by(ZY)%>%
+  summarise(num = n())
+#统计中药频率的最小值、最大值、均值、中值、各分位值
+summary(ZY_id)
+
+#根据次数进行降序排列
+ZY_id<-ZY_id[order(ZY_id$num,decreasing =T),]
+
+#导出中药频数
+write.csv(ZY_id,file="E:/中药斗譜排列/论文数据/关联规则_各中药出现的次数ZY_id.csv")
+
+
+#绘制前30的数据,删除[1:30,]可显示全部，0.1*num使y轴的坐标轴增大10%
+ggplot(ZY_id[1:30,],aes(x = reorder(ZY,-num),y = num)) +
+  theme_bw(base_family = "STKaiti",base_size = 10) +
+  geom_bar(stat = "identity",fill = "lightblue") +
+  labs(x = "TCMs",y = "频率") + 
+ # coord_flip() +#可使柱形图变条形图
+  geom_text(aes(x = reorder(ZY,-num),y = num+0.1*num,label = num),size = 3)
+
+#图片美化
+#添加字体
+windowsFonts(Times=windowsFont("Times New Roman"))
+ggplot(ZY_id[1:30,], aes(x = reorder(ZY,-num),y = num,fill=factor(num)))+#横坐标设置为取间，纵坐标为频数，填充颜色以num为对象
+geom_bar(stat="identity",width=0.9)+#组间距宽度
+scale_fill_hue()+#配制颜色
+ylim(0,max(ZY_id$num))+#设置纵轴范围
+geom_text(aes(label =num, vjust = -0.8, hjust = 0.5,family="Times"),size=rel(3),show.legend = F)+#设置数据标签的字体、大小、位置等
+#结合theme设置
+#设置背景
+theme（panel.background=element_rect（fill=“白色”））+#设置背景变为白色
+#设置坐标轴字体颜色位置
+theme（axis.text.x=element_text（angle=30，hjust = 1，colour=“black”，family=“Times”，size=rel（1.2）））+#设置x轴刻度标签的字体显示倾斜角度为30度，并向下调整1，字体为Times
+theme（axis.text.y=element_text（color=“黑色”，family=“Times”，size=rel（1.5）））+#设置y轴上的字体
+xlab（“TCMs”）+ #设置横坐标轴标签
+ylab（“频率”）+#设置纵坐标轴标签
+#labs（title = “中药频次数量分布图”）+ #设置标题标签，此次不予显示
+#设置标题颜色字体位置
+theme（plot.title=element_text（color=“red”，face=“bold”，size=rel（1.5），hjust=0.5））+#大标题颜色，字体，大小，hjust=0.5横向坐标0.5（即居中），vjust表示纵向
+theme（axis.title.x=element_text（color=“blue”，family=“Times”，size=rel（1.5）））+#设置x轴标题
+theme（axis.title.y=element_text（color=“blue”，family=“Times”，size=rel（1.5）））+#设置y轴标题
+theme（axis.line=element_line（colour=“黑色”，size=0.8））+#显示坐标轴线及线条粗细
+#设置坐标轴主次网格线
+主题（panel.grid.major.x=element_blank（），panel.grid.minor.x=element_blank（））+#隐藏横网格线
+theme（panel.grid.major.y=element_line（colour=“white”，linetype=“dashed”，size=0.2），panel.grid.minor.y=element_line（colour=“white”，linetype=“dashed”，size=0.2））+#绘制Y轴上横线
+#设置图例
+theme（legend.text=element_text（face=“斜体”， family=“Times”， colour=“黑色”，size=16））+#设置图例的子标题的字体属性
+theme（legend.title=element_text（face=“斜体”， family=“Times”， colour=“black”， size=18））+ #设置图例的总标题的字体属性
+theme（legend.position=“none”）#设置图例位置，none表示不显示图例
+ggsave（'中药频次ZY_id_top30.png'， width = 10， height = 6， dpi = 1200， limitsize = FALSE）#保存图片
+
+#加载导出的df.csv，即重新加载处方与单一药物对应关系表，ID为处方编码，ZY为单一的中药
+mydata <- read.csv（“处方编号和单一中药对应.csv”，header=T）
+
+
+# 数据表转化为list
+gzgldata<- 拆分（x=mydata$ZY，f=mydata$ID）
+
+# 查看一共有多少个中药，每个处方的中药数量之和
+sum（sapply（gzgldata，长度））
+
+# 过滤掉同一张处方中相同的中药
+buy_data <- lapply（gzgldata，unique）
+
+# 重新查看一共有多少个中药，每个处方的中药数量之和
+sum（sapply（gzgldata，长度））
+
+## 转换数据形势，用于关联规则分析
+gzgldata <- as（gzgldata， “事务”）
+
+
+#对转化后的数据集查看频繁项集
+
+#cex = 0.7将文本和符号的大小设置为原来的0.7倍
+面值（CEX = 0.7）
+
+## 中药频率大于等于0.1且排名前20 的中药
+itemFrequencyPlot（gzgldata， topN=20，support = 0.1，col = “浅蓝色”，
+xlab = “横坐标轴名称：中药”，ylab = “纵坐标名称：频率”，
+main = “标题：各中药频率”）
+
+
+#找到关联规则
+
+#support = 0.1：这个参数设置了关联规则的最小支持度。支持度是一个规则在所有事务中出现的频率。在这个例子中，我们设置支持度为0.1，意味着我们只对在至少10%的事务中出现的规则感兴趣。
+#confidence = 0.7： 这个参数设置了关联规则的最低置信度。置信度是一个规则的置信水平，表示规则的预测准确性。在这个例子中，我们设置置信度为0.7，意味着我们只对那些预测准确率至少为70%的规则感兴趣。
+#minlen = 2： 这个参数设置了关联规则的最小长度。在这个例子中，我们设置最小长度为2，意味着我们只对有两个项或更多项的规则感兴趣。
+
+#myrule <- apriori（data = gzgldata， parameter = list（support = 0.05， confidence = 0.8， minlen =2 ， maxlen = 10））
+
+#以下设置代表每一个中药两两之间的关联度
+myrule <- apriori（data = gzgldata， parameter = list（support = 0.0， confidence = 0.0， minlen =2 ， maxlen = 2））
+
+#Absolute minimum support count： 这里显示了绝对最小支持计数，表示为了成为有效规则，一个项集需要的最小事务数。在这个例子中，这个值为9，意味着一个项集必须至少出现在9个事务中才能成为有效规则。
+#set 物品外观...[0 件商品] 完成 [0.00 秒]。设置交易 ...[202 项目， 99 交易] done [0.00s]...： 这些行显示了apriori函数在执行过程中的一些步骤和耗时。
+#writing......[13 rules（s）] done [0.00s]： 这行表示在我们的数据集中找到了13个有效的关联规则。
+#creating S4 对象 ...done [0.00s]： 这行表示apriori函数已经完成，并创建了一个S4对象（在这个例子中是myrule）
+
+
+## 将规则按照提升度排序
+sortlift <- arules：：sort（myrule，deduceasing = TRUE，by = “lift”）
+sortlift_30<检查（sortlift[1：30]）
+
+
+## 将规则按照support排序
+sortsupport <- arules：：sort（myrule，decreasing = TRUE，by = “support”）
+检查（排序支持[1：30]）
+
+
+#规则校验（类似测试集）
+qualityMeasures<-interestMeasure（myrule，c（“coverage”，“fishersExactTest”，“conviction”，“chiSquared”）， transactions=gzgldata）
+
+theme（axis.text.x=element_text（angle=30，hjust = 1，colour=“black”，family=“Times”，size=rel（1.2）））+#设置x轴刻度标签的字体显示倾斜角度为30度，并向下调整1，字体为Times
+theme（axis.text.y=element_text（color=“黑色”，family=“Times”，size=rel（1.5）））+#设置y轴上的字体
+xlab（“TCMs”）+ #设置横坐标轴标签
+ylab（“频率”）+#设置纵坐标轴标签
+#labs（title = “中药频次数量分布图”）+ #设置标题标签，此次不予显示
+库（readxl）
+theme（plot.title=element_text（color=“red”，face=“bold”，size=rel（1.5），hjust=0.5））+#大标题颜色，字体，大小，hjust=0.5横向坐标0.5（即居中），vjust表示纵向
+theme（axis.title.x=element_text（color=“blue”，family=“Times”，size=rel（1.5）））+#设置x轴标题
+theme（axis.title.y=element_text（color=“blue”，family=“Times”，size=rel（1.5）））+#设置y轴标题
+theme（axis.line=element_line（colour=“黑色”，size=0.8））+#显示坐标轴线及线条粗细
+mydata <- read_excel（“2022处方.xlsx”）
+主题（panel.grid.major.x=element_blank（），panel.grid.minor.x=element_blank（））+#隐藏横网格线
+df<- data.frame（）
+nrow<-nrow（mydata）
+for（i in 1：nrow）{
+d<-data.frame（mydata[[1]][i]，strsplit（mydata[[2]][i]，“、”））
+ID<-d[，1]
+ZY<-d[，2]
+d<-数据帧（ID，ZY）
+DF<-RBIND（DF、D）
+theme（panel.background=element_rect（fill=“白色”））+#设置背景变为白色
+plot（myrule， control=list（jitter=2， col = rev（brewer.pal（3， “Blues”）））， shading = “lift”，method = “grouped”）
+write.csv（df，“处方编号和单一中药对应.csv”）
+#将规则可视化为grouped matrix的形式。
+扬程（DF）
+面值（CEX = 0.7）
+length（唯一（df$ZY））
+
+
+长度（唯一（df$ID））
+相关<矩阵（NA， nrow =length（ZY_id$ZY），ncol = length（ZY_id$ZY））
+# 重命名行名和列名为中药名
+ID_zy <- df %>% group_by（ID） %>% summarise（num=n（））
+colnames（相关） <-ZY_id[，1]$ZY
+  
+摘要（ID_zy）
+write.csv（ID_zy，file=“每个处方的中药数量ID_zy.csv”）
+规则 1 <- strsplit（as.character（ruledf[i， “rules”]）， split = “ => ”， fixed = TRUE）[[1]][1]
+规则 1 <- gsub（“[{}]”， “”， 规则 1）
+#若x=ID，则按原本的处方顺序排序，若代码为x = reorder（ID，-num），则按处方中药物数量降序绘图，x = reorder（ID，num），为升序绘图。
+ggplot（ID_zy，aes（x = 重新排序（ID，-num），y = num）） +
+theme_bw（base_family = “STKaiti”，base_size = 10） +
+geom_bar（stat = “identity”，fill = “lightblue”） +
+labs（x = “处方”，y = “中药数量”）
+#将所有为NA的替换为数值1
+相关性[is.na（相关性）] <- 1
+
+windowsFonts（Times=windowsFont（“Times New Roman”））
+ggplot（ID_zy， aes（x = reorder（ID，-num），y = num，fill=factor（num）））+#横坐标设置为取间，纵坐标为频数，填充颜色以num为对象
+  
